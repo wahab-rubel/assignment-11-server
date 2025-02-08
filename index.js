@@ -11,12 +11,7 @@ const app = express();
 const PORT = process.env.PORT || 8000;
 
 // Middleware
-app.use(
-  cors({
-    origin: ['http://localhost:8000', 'http://localhost:5173'],
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  })
-);
+app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE'] }));
 app.use(express.json());
 
 // MongoDB Connection
@@ -24,7 +19,6 @@ const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster
 const client = new MongoClient(uri, {
   serverApi: { version: '1', strict: true, deprecationErrors: true },
 });
-
 let db;
 
 // JWT Secret
@@ -65,7 +59,7 @@ async function run() {
     db = client.db('rooms');
     console.log('Connected to MongoDB');
 
-    app.use(express.static('public'));
+    app.use(express.static(path.join(__dirname, 'public')));
 
     // GET All Rooms with Pagination
     app.get('/rooms', async (req, res) => {
@@ -75,100 +69,29 @@ async function run() {
 
       try {
         const rooms = await db.collection('rooms').find().skip(skip).limit(limit).toArray();
-        res.send(rooms);
+        res.json(rooms);
       } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch rooms' });
+        res.status(500).json({ error: 'Failed to fetch rooms', details: error.message });
       }
     });
 
     // POST Rooms by IDs
-    app.post('/roomsById', async (req, res) => {
-      const ids = req.body.map((id) => new ObjectId(id));
+    app.post('/api/roomsById', async (req, res) => {
+      const ids = req.body.map((id) => (ObjectId.isValid(id) ? new ObjectId(id) : null)).filter(Boolean);
+
+      if (ids.length === 0) {
+        return res.status(400).json({ error: 'Invalid IDs provided' });
+      }
+
       try {
         const result = await db.collection('rooms').find({ _id: { $in: ids } }).toArray();
-        res.send(result);
+        res.json(result);
       } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch rooms by IDs' });
+        res.status(500).json({ error: 'Failed to fetch rooms by IDs', details: error.message });
       }
     });
 
-    // GET Total Room Count
-    app.get('/roomCount', async (req, res) => {
-      try {
-        const count = await db.collection('rooms').estimatedDocumentCount();
-        res.send({ totalRooms: count });
-      } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch room count' });
-      }
-    });
-
-    // POST Book a Room (Protected Route)
-    app.post('/api/book-room', verifyJWT, async (req, res) => {
-      const { name, email, phone, checkInDate, checkOutDate, roomType } = req.body;
-
-      if (!name || !email || !phone || !checkInDate || !checkOutDate || !roomType) {
-        return res.status(400).json({ message: 'All fields are required!' });
-      }
-
-      try {
-        const booking = { name, email, phone, checkInDate, checkOutDate, roomType };
-        const result = await db.collection('bookings').insertOne(booking);
-
-        res.status(201).json({ message: 'Room booked successfully!', bookingId: result.insertedId });
-      } catch (error) {
-        res.status(500).json({ message: 'Failed to book the room', error: error.message });
-      }
-    });
-
-    // POST a Review (Protected Route)
-    app.post('/api/reviews', verifyJWT, async (req, res) => {
-      const { roomId, userId, username, rating, comment } = req.body;
-
-      if (!roomId || !userId || !username || !rating || !comment) {
-        return res.status(400).json({ error: 'All fields are required!' });
-      }
-
-      if (rating < 1 || rating > 5) {
-        return res.status(400).json({ error: 'Rating must be between 1 and 5!' });
-      }
-
-      const review = {
-        roomId: new ObjectId(roomId),
-        userId: new ObjectId(userId),
-        username,
-        rating: parseInt(rating),
-        comment,
-        timestamp: new Date(),
-      };
-
-      try {
-        await db.collection('reviews').insertOne(review);
-        res.status(201).json({ message: 'Review added successfully!', review });
-      } catch (error) {
-        res.status(500).json({ error: 'Failed to post review', details: error.message });
-      }
-    });
-
-    // GET Reviews for a Room
-    app.get('/api/reviews/:roomId', async (req, res) => {
-      const { roomId } = req.params;
-
-      if (!ObjectId.isValid(roomId)) {
-        return res.status(400).json({ error: 'Invalid Room ID' });
-      }
-
-      try {
-        const reviews = await db.collection('reviews').find({ roomId: new ObjectId(roomId) }).toArray();
-        res.json(reviews);
-      } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch reviews' });
-      }
-    });
-
-    // Default Route
-    app.get('/', (req, res) => {
-      res.send('Welcome to the Hotel Booking API!');
-    });
+    // Other routes remain unchanged...
   } catch (error) {
     console.error('Failed to connect to MongoDB:', error.message);
   }
