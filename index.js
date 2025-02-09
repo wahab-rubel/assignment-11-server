@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv');
 const path = require('path');
 
+// Load environment variables
 dotenv.config();
 
 const app = express();
@@ -61,7 +62,7 @@ async function run() {
 
     app.use(express.static(path.join(__dirname, 'public')));
 
-    // GET All Rooms with Pagination
+    // Base API path: rooms
     app.get('/rooms', async (req, res) => {
       const page = parseInt(req.query.page) || 0;
       const limit = parseInt(req.query.limit) || 15;
@@ -91,7 +92,29 @@ async function run() {
       }
     });
 
-    // Other routes remain unchanged...
+    // Additional route example: GET a single room by ID
+    app.get('/api/rooms/:id', async (req, res) => {
+      const { id } = req.params;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ error: 'Invalid room ID' });
+      }
+
+      try {
+        const room = await db.collection('rooms').findOne({ _id: new ObjectId(id) });
+        if (!room) {
+          return res.status(404).json({ message: 'Room not found' });
+        }
+        res.json(room);
+      } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch the room', details: error.message });
+      }
+    });
+
+    // Example protected route with JWT
+    app.get('/api/protected', verifyJWT, (req, res) => {
+      res.status(200).json({ message: 'Welcome to the protected route!', user: req.user });
+    });
   } catch (error) {
     console.error('Failed to connect to MongoDB:', error.message);
   }
