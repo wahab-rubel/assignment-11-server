@@ -62,6 +62,11 @@ async function run() {
 
     app.use(express.static(path.join(__dirname, 'public')));
 
+
+    app.get("/", (req, res) => {
+      res.send("Server is running!");
+    });
+    
     // Base API path: rooms
     app.get('/rooms', async (req, res) => {
       const page = parseInt(req.query.page) || 0;
